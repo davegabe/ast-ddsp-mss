@@ -1,0 +1,26 @@
+name: torch-ddsp
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
+  - av
+  - tqdm
+  - pip:
+    - llvmlite==0.36.0
+    - matplotlib==3.4.2
+    - numba==0.53.1
+    - scikit-learn==0.24.2
+    - scipy==1.6.3
+    - sklearn==0.0
+    - timm==0.4.5
+    - wget==3.2
+    - zipp==3.4.1
+    - crepe>=0.0.11
+    - librosa>=0.8.0
+    - auraloss[all]>=0.4.0

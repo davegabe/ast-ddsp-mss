@@ -1,0 +1,158 @@
+\documentclass{article}
+
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{overpic}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{positioning, shapes.multipart}
+
+\usepackage[accepted]{dlai2023}
+
+%%% STUDENTS: FILL IN WITH YOUR OWN INFORMATION
+\dlaititlerunning{Music Source Separation with DDSP}
+
+\begin{document}
+
+\twocolumn[
+    %%% STUDENTS: FILL IN WITH YOUR OWN INFORMATION
+    \dlaititle{Music Source Separation with DDSP}
+
+    \begin{center}\today\end{center}
+
+    \begin{dlaiauthorlist}
+        %%% STUDENTS: FILL IN WITH YOUR OWN INFORMATION
+        \dlaiauthor{Davide Gabrielli}{}
+    \end{dlaiauthorlist}
+
+    %%% STUDENTS: FILL IN WITH YOUR OWN INFORMATION
+    \dlaicorrespondingauthor{Davide Gabrielli}{gabrielli.1883616@studenti.uniroma1.it}
+
+    \vskip 0.3in
+]
+
+\printAffiliationsAndNotice{}
+
+\begin{abstract}
+    %
+    When listening to music, we listen to a mixture of different instruments and vocals.
+    Music Source Separation is the task of separating the different sources which compose a music track.
+    In this work a novel approach for MSS is proposed, based on the \textbf{Audio Spectrogram Transformer} performing
+    regression over the parameters of the \textbf{Differentiable Digital Signal Processing}
+    in order to reconstruct the stem track of an instrument from the mixture.
+    %
+\end{abstract}
+
+% ------------------------------------------------------------------------------
+
+\section{Introduction}
+Music Source Separation (MSS) is a pivotal task in the field of audio signal processing, which aims to isolate individual sound sources within a complex musical composition.
+The ability to disentangle the mixture of instruments and vocals present in a recording is of great interest
+in many applications, such as music transcription, remixing, and automatic music transcription.
+
+The model proposed in this work \textbf{(AST-DDSP)} is an end-to-end neural network that takes as input the mixture logmel spectrogram and outputs
+the reconstructed audio of an instrument source by using the Differentiable Digital Signal Processing (DDSP)~\cite{ddsp} synthesizer.
+
+In particular, the contributions of this work are:
+\begin{itemize}
+    \item The application of the Audio Spectrogram Transformer (AST)~\cite{gong21b_interspeech} to regression tasks.
+    \item A novel architecture for MSS based on the AST and the DDSP Sinusoidal Synthesizer.
+    \item The implementation of the Sinusoidal Synthesizer in PyTorch and some other core components of DDSP.
+    \item The code of the proposed model on GitHub \url{https://github.com/davegabe/ast-ddsp-mss}.
+\end{itemize}
+\smallskip
+
+\section{Related Work}
+\subsection{MSS in Spectrogram Domain}
+Many approaches to Music Source Separation (MSS) revolve around generating masks for individual sources and applying them to the mixture~\cite{opensourceseparation:book}.
+While this method is widely adopted, it has inherent limitations. Instruments occupying the same frequency range may pose challenges for the mask, resulting in incomplete separation.
+Additionally, reconstructing audio from the spectrogram, whether through inverse Short-Time Fourier Transform or neural vocoders, can introduce undesirable artifacts.
+
+\subsection{MSS in Waveform Domain}
+An alternative approach involves using neural networks to directly estimate the waveform of the source as for Demucs~\cite{défossez2019demucs}.
+Or by combining both representations as for the recent Hybrid Transformer Demucs~\cite{rouard2022hybrid}.
+
+\subsection{DDSP for Inverse Audio Synthesis}
+DDSP is a differentiable synthesizer that can be used to generate audio from a set of parameters.
+In the work of~\cite{ddsp_icml} the authors propose a method to train DDSP for \textbf{inverse audio synthesis}, so that
+given an audio signal the model is able to extract the parameters that can be used to reconstruct the original audio.
+
+The model is composed by a Sinusoidal Encoder, which extracts the sinusoidal frequencies, sinusoidal amplitudes and filtered noise magnitudes
+using a ResNet-38 on the logmel spectrogram and synthesizes the audio using a Sinusoidal Encoder and a Harmonic Encoder, which use the 
+output of the Sinusoidal Encoder to extract the fundamental frequency, amplitude and harmonic distribution.
+
+In fact the authors based their implementation on the Harmonic Plus Noise Model (HPNM)~\cite{Serra1990} which is a model that
+can be used to represent an audio signal as combination of sinusoids in harmonic ratios of a fundamental frequency
+alongside a time-varying filtered noise signal, but this model can be used \textbf{only for monophonic sources}.
+
+\section{Method}
+The proposed method is an attempt to combine the advantages of the approaches described above, using the \textbf{logmel spectrogram domain}
+to extract the relevant information about an instrument from the mixture and use them to reconstruct it directly in the source in the waveform domain
+leveraging a synthesizer over the DDSP parameters.
+
+\begin{figure}[h]
+    \centering
+    \begin{overpic}[width=0.75\linewidth]{./ast-ddsp.jpg}
+    \end{overpic}
+    \caption{The proposed AST-DDSP model.}
+    \label{fig:ast-ddsp}
+\end{figure}
+
+The implementation is inspired by the idea of inverse audio synthesis of~\cite{ddsp_icml}, by combining the Sinusoidal Encoder and the AST model (Figure~\ref{fig:ast-ddsp}).
+The Harmonic Encoder has been removed due to the fact that it limits the model to generate only monophonic sources
+while in MSS we are interested in separating \textbf{also inharmonic} (e.g.~drums) \textbf{or polyphonic} (e.g.~piano, guitar) \textbf{sources}.
+
+So we have the \textbf{Sinusoidal Encoder} which outputs the sinusoidal frequencies \(f_k\), amplitudes \(A_k\) and filtered noise magnitudes \(N_k\) every 62.5ms, which are upsampled to audio rate.
+The \textbf{Sinusoidal Synthesizer} as described in~\cite{ddsp_icml} which reconstructs the audio as a sum of sinusoids:
+
+\begin{equation}
+    x(n) = \sum_{k=0}^{K-1} A_k(n) \sin(\phi_k(n))
+\end{equation}
+
+where \(\phi_k(n)\) is the phase obtained by cumulatively summing the frequency \(f_k(n)\):
+
+\begin{equation}
+    \phi_k(n) = 2\pi \sum_{m=0}^{n} f_k(m)
+\end{equation}
+
+The \textbf{Filtered Noise} is generated uniformly at random from a set of 65 bandpass filters whose
+amplitude is modulated by the filtered noise magnitudes \(N_k\).
+
+The two signals are then combined to obtain the output of the model, which is the stem track of the instrument in waveform domain.
+
+\section{Results}
+For the experiments 3 different models have been trained, one for each instrument (bass, drums and guitar), for the purpose of
+demonstrating the effectiveness of the proposed method on monophonic (bass), inharmonic (drums) and polyphonic (guitar) sources.
+
+Each model has been trained on the \textbf{Slakh2100 dataset}~\cite{manilow2019cutting} for 800 epochs (\(\sim \)250K steps) using
+ADAM optimizer with a batch size of 128 and learning rate of 3e-4, and exponential learning rate decay 0.98 every 10,000 steps.
+
+The loss used is \textbf{Multi-Resolution STFT Loss}~\cite{steinmetz2020auraloss} which is the sum of the STFT losses
+with different analysis parameters (window size, hop size, etc.) to make the model more robust to variations in frequency and temporal content,
+improving its ability to accurately separate different audio sources with different spectral and temporal characteristics.
+
+
+Since the model is computationally expensive to train, the dataset has been downsampled to 8kHz and the network has been fed with 2 seconds of audio.
+The audio results can be found on the GitHub Page \url{https://davegabe.github.io/ast-ddsp-mss/}
+
+
+\section{Conclusions}
+As shown in the results \textbf{the model is able to extract the audio} of monophonic and inharmonic instrument sources from the mixture, but the quality is not very good.
+This can be due to the fact that the model has not been trained for enough epochs because of the limited computational resources available.
+
+Moreover the model struggles to extract the guitar from the mixture probably because the training data consists of both monophonic and
+polyphonic sources and also has a wider frequency range than the other instruments.
+
+For the future work I plan to extend the training for more epochs, using a higher sample rate (in order to not lose significant spectral content)
+and to perform a more in-depth hyperparameter search in order to improve the quality of the audio and to make the model more robust to polyphonic sources.
+Moreover, I plan to extend the model to be able to separate multiple sources at the same time.
+
+
+% \paragraph*{Bibliography.}
+
+\bibliography{references.bib}
+\bibliographystyle{dlai2023}
+
+\end{document}
